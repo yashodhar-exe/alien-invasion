@@ -27,31 +27,67 @@
 var Game = new function() {                                                                  
   var boards = [];
 
+  // Base height is the reference - width is computed from aspect ratio
+  this.baseHeight = 480;
+
+  // These are set dynamically by setupFullscreen
+  this.width = 320;
+  this.height = 480;
+  this.scale = 1;
+
+  // Lives system
+  this.lives = 3;
+  this.maxLives = 3;
+
   // Game Initialization
   this.initialize = function(canvasElementId,sprite_data,callback) {
     this.canvas = document.getElementById(canvasElementId);
 
     this.playerOffset = 10;
     this.canvasMultiplier= 1;
-    this.setupMobile();
-
-    this.width = this.canvas.width;
-    this.height= this.canvas.height;
 
     this.ctx = this.canvas.getContext && this.canvas.getContext('2d');
     if(!this.ctx) { return alert("Please upgrade your browser to play"); }
 
+    this.setupFullscreen();
     this.setupInput();
 
     this.loop(); 
 
-    if(this.mobile) {
-      this.setBoard(4,new TouchControls());
-    }
-
     SpriteSheet.load(sprite_data,callback);
   };
   
+
+  // True fullscreen — canvas fills entire viewport, no borders
+  // Logical height is fixed (baseHeight), logical width adapts to aspect ratio
+  this.setupFullscreen = function() {
+    var self = this;
+    
+    this.resize = function() {
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+
+      // Scale factor: how much to scale from logical to physical pixels
+      self.scale = h / self.baseHeight;
+
+      // Compute logical width from the physical aspect ratio
+      self.width = Math.ceil(w / self.scale);
+      self.height = self.baseHeight;
+
+      // Canvas fills 100% of viewport
+      self.canvas.width = w;
+      self.canvas.height = h;
+      self.canvas.style.width = w + 'px';
+      self.canvas.style.height = h + 'px';
+      self.canvas.style.position = 'fixed';
+      self.canvas.style.left = '0';
+      self.canvas.style.top = '0';
+    };
+
+    this.resize();
+    window.addEventListener('resize', this.resize);
+  };
+
 
   // Handle Input
   var KEY_CODES = { 37:'left', 39:'right', 32 :'fire' };
@@ -83,57 +119,27 @@ var Game = new function() {
     var dt = (curTime - lastTime)/1000;
     if(dt > maxTime) { dt = maxTime; }
 
+    // Clear entire canvas
+    Game.ctx.clearRect(0, 0, Game.canvas.width, Game.canvas.height);
+
+    // Apply uniform scaling transform
+    Game.ctx.save();
+    Game.ctx.scale(Game.scale, Game.scale);
+    Game.ctx.imageSmoothingEnabled = false;
+
     for(var i=0,len = boards.length;i<len;i++) {
       if(boards[i]) { 
         boards[i].step(dt);
         boards[i].draw(Game.ctx);
       }
     }
+
+    Game.ctx.restore();
     lastTime = curTime;
   };
   
   // Change an active game board
   this.setBoard = function(num,board) { boards[num] = board; };
-
-
-  this.setupMobile = function() {
-    var container = document.getElementById("container"),
-        hasTouch =  !!('ontouchstart' in window),
-        w = window.innerWidth, h = window.innerHeight;
-      
-    if(hasTouch) { this.mobile = true; }
-
-    if(screen.width >= 1280 || !hasTouch) { return false; }
-
-    if(w > h) {
-      alert("Please rotate the device and then click OK");
-      w = window.innerWidth; h = window.innerHeight;
-    }
-
-    container.style.height = h*2 + "px";
-    window.scrollTo(0,1);
-
-    h = window.innerHeight + 2;
-    container.style.height = h + "px";
-    container.style.width = w + "px";
-    container.style.padding = 0;
-
-    if(h >= this.canvas.height * 1.75 || w >= this.canvas.height * 1.75) {
-      this.canvasMultiplier = 2;
-      this.canvas.width = w / 2;
-      this.canvas.height = h / 2;
-      this.canvas.style.width = w + "px";
-      this.canvas.style.height = h + "px";
-    } else {
-      this.canvas.width = w;
-      this.canvas.height = h;
-    }
-
-    this.canvas.style.position='absolute';
-    this.canvas.style.left="0px";
-    this.canvas.style.top="0px";
-
-  };
 
 };
 
@@ -429,24 +435,150 @@ var TouchControls = function() {
 };
 
 
+// =============================================
+// HUD: Score + Lives display (board layer)
+// =============================================
 var GamePoints = function() {
   Game.points = 0;
 
   var pointsLength = 8;
+  this.lastLives = Game.lives;
+  this.lifePulse = 0;
 
   this.draw = function(ctx) {
     ctx.save();
-    ctx.font = "bold 18px arial";
-    ctx.fillStyle= "#FFFFFF";
+
+    // Draw lives (pixel hearts) on top-left
+    var heartSize = 14;
+    var heartSpacing = 22;
+    var heartY = 10;
+    var heartStartX = 16;
+
+    for(var i = 0; i < Game.maxLives; i++) {
+      var hx = heartStartX + i * heartSpacing;
+      var currentSize = heartSize;
+      var cy = heartY;
+
+      if(i === Game.lives && this.lifePulse > 0) {
+        // pulse animation
+        currentSize = heartSize + Math.sin(this.lifePulse * Math.PI) * 4;
+        cy = heartY - (currentSize - heartSize) / 2;
+        hx = hx - (currentSize - heartSize) / 2;
+      }
+
+      if(i < Game.lives) {
+        // Full heart with slight red glow
+        ctx.shadowColor = 'rgba(255, 60, 60, 0.6)';
+        ctx.shadowBlur = 4;
+        drawPixelHeart(ctx, hx, cy, currentSize, '#ffb4a8');
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = 'transparent';
+      } else {
+        // Empty/dim heart
+        var color = 'rgba(255, 255, 255, 0.15)';
+        if(i === Game.lives && this.lifePulse > 0) {
+           var flash = Math.abs(Math.cos(this.lifePulse * 15));
+           color = 'rgba(255, 180, 168, ' + (0.15 + flash * 0.5) + ')';
+        }
+        drawPixelHeart(ctx, hx, cy, currentSize, color);
+      }
+    }
+
+    // Draw score on top-right using pixel font
+    ctx.font = "12px 'Press Start 2P', monospace";
+    ctx.fillStyle = "#ffb4a8";
+    ctx.textAlign = 'right';
 
     var txt = "" + Game.points;
-    var i = pointsLength - txt.length, zeros = "";
-    while(i-- > 0) { zeros += "0"; }
+    var i2 = pointsLength - txt.length, zeros = "";
+    while(i2-- > 0) { zeros += "0"; }
 
-    ctx.fillText(zeros + txt,10,20);
+    ctx.shadowColor = '#690100';
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    ctx.shadowBlur = 0;
+    ctx.fillText(zeros + txt, Game.width - 16, 22);
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowColor = 'transparent';
+    ctx.textAlign = 'left';
+
     ctx.restore();
-
   };
 
-  this.step = function(dt) { };
+  this.step = function(dt) {
+    if (Game.lives < this.lastLives) {
+      if (Game.lives >= 0) {
+         this.lifePulse = 1.0;
+      }
+      this.lastLives = Game.lives;
+    }
+    if (this.lifePulse > 0) {
+      this.lifePulse -= dt * 3;
+      if (this.lifePulse < 0) this.lifePulse = 0;
+    }
+  };
 };
+
+// Draw a pixel heart using a 7x6 grid
+function drawPixelHeart(ctx, x, y, size, color) {
+  var pixels = [
+    [0,1,1,0,1,1,0],
+    [1,1,1,1,1,1,1],
+    [1,1,1,1,1,1,1],
+    [0,1,1,1,1,1,0],
+    [0,0,1,1,1,0,0],
+    [0,0,0,1,0,0,0]
+  ];
+  ctx.save();
+  ctx.fillStyle = color;
+  var pSize = size / 7;
+  for (var r = 0; r < 6; r++) {
+    for (var c = 0; c < 7; c++) {
+      if (pixels[r][c]) {
+        ctx.fillRect(x + c * pSize, y + r * pSize, pSize, pSize);
+      }
+    }
+  }
+  ctx.restore();
+}
+
+
+// =============================================
+// Screen flash effect when player takes damage
+// =============================================
+var ScreenFlash = function() {
+  this.alpha = 0;
+  this.duration = 0.3;
+  this.timer = 0;
+  this.active = false;
+  this.color = 'rgba(255, 50, 50, ';
+};
+
+ScreenFlash.prototype.trigger = function() {
+  this.alpha = 0.5;
+  this.timer = this.duration;
+  this.active = true;
+};
+
+ScreenFlash.prototype.step = function(dt) {
+  if(!this.active) return;
+  this.timer -= dt;
+  if(this.timer <= 0) {
+    this.active = false;
+    this.alpha = 0;
+  } else {
+    this.alpha = 0.5 * (this.timer / this.duration);
+  }
+};
+
+ScreenFlash.prototype.draw = function(ctx) {
+  if(!this.active) return;
+  ctx.save();
+  ctx.fillStyle = this.color + this.alpha + ')';
+  ctx.fillRect(0, 0, Game.width, Game.height);
+  ctx.restore();
+};
+
+// Global reference for flash
+Game.screenFlash = new ScreenFlash();

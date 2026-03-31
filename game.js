@@ -31,7 +31,7 @@ var OBJECT_PLAYER = 1,
 var startGame = function() {
   var ua = navigator.userAgent.toLowerCase();
 
-  // Only 1 row of stars
+  // Only 1 row of stars on Android
   if(ua.match(/android/)) {
     Game.setBoard(0,new Starfield(50,0.6,100,true));
   } else {
@@ -39,9 +39,11 @@ var startGame = function() {
     Game.setBoard(1,new Starfield(50,0.6,100));
     Game.setBoard(2,new Starfield(100,1.0,50));
   }  
-  Game.setBoard(3,new TitleScreen("Alien Invasion", 
-                                  "Press fire to start playing",
-                                  playGame));
+  var titleOverlay = document.getElementById('title-screen-overlay');
+  if(titleOverlay) {
+    titleOverlay.classList.remove('hidden');
+    titleOverlay.classList.add('flex');
+  }
 };
 
 var level1 = [
@@ -59,11 +61,20 @@ var level1 = [
 
 
 var playGame = function() {
+  // Hide game over overlay if visible
+  var overlay = document.getElementById('game-over-overlay');
+  if(overlay) overlay.classList.remove('visible');
+
+  // Reset lives
+  Game.lives = Game.maxLives;
+  Game.points = 0;
+
   var board = new GameBoard();
   board.add(new PlayerShip());
   board.add(new Level(level1,winGame));
   Game.setBoard(3,board);
   Game.setBoard(5,new GamePoints(0));
+  Game.setBoard(6, Game.screenFlash);
 };
 
 var winGame = function() {
@@ -73,14 +84,67 @@ var winGame = function() {
 };
 
 var loseGame = function() {
-  Game.setBoard(3,new TitleScreen("You lose!", 
-                                  "Press fire to play again",
-                                  playGame));
+  // Show the beautiful Game Over overlay
+  var overlay = document.getElementById('game-over-overlay');
+  var scoreEl = document.getElementById('game-over-score');
+  
+  if(overlay && scoreEl) {
+    // Format score with leading zeros
+    var scoreStr = "" + Game.points;
+    while(scoreStr.length < 8) scoreStr = "0" + scoreStr;
+    scoreEl.textContent = scoreStr;
+    overlay.classList.add('visible');
+  }
+
+  // Clear game board but keep starfield running
+  Game.setBoard(3, {
+    step: function() {},
+    draw: function() {}
+  });
+  Game.setBoard(5, null);
+  Game.setBoard(6, null);
 };
 
+// Button handlers
+document.addEventListener('DOMContentLoaded', function() {
+  var retryBtn = document.getElementById('game-over-retry');
+  if(retryBtn) {
+    retryBtn.addEventListener('click', function() {
+      playGame();
+    });
+  }
+
+  var startBtn = document.getElementById('title-btn-start');
+  if(startBtn) {
+    startBtn.addEventListener('click', function() {
+      AudioSystem.init();
+      var titleOverlay = document.getElementById('title-screen-overlay');
+      if(titleOverlay) {
+        titleOverlay.classList.add('hidden');
+        titleOverlay.classList.remove('flex');
+      }
+      playGame();
+    });
+  }
+
+  var muteBtn = document.getElementById('btn-mute');
+  if(muteBtn) {
+    muteBtn.addEventListener('mousedown', function(e) { e.stopPropagation(); });
+    muteBtn.addEventListener('click', function() {
+      var isMuted = AudioSystem.toggleMute();
+      document.getElementById('icon-speaker-on').classList.toggle('hidden', isMuted);
+      document.getElementById('icon-speaker-off').classList.toggle('hidden', !isMuted);
+    });
+  }
+});
+
+
+// =============================================
+// STARFIELD — fills the full dynamic game area
+// =============================================
 var Starfield = function(speed,opacity,numStars,clear) {
 
-  // Set up the offscreen canvas
+  // Set up the offscreen canvas matching current game dimensions
   var stars = document.createElement("canvas");
   stars.width = Game.width; 
   stars.height = Game.height;
@@ -95,11 +159,15 @@ var Starfield = function(speed,opacity,numStars,clear) {
     starCtx.fillRect(0,0,stars.width,stars.height);
   }
 
+  // Scale star count proportionally to the area
+  var areaRatio = (Game.width * Game.height) / (320 * 480);
+  var scaledStars = Math.ceil(numStars * areaRatio);
+
   // Now draw a bunch of random 2 pixel
   // rectangles onto the offscreen canvas
   starCtx.fillStyle = "#FFF";
   starCtx.globalAlpha = opacity;
-  for(var i=0;i<numStars;i++) {
+  for(var i=0;i<scaledStars;i++) {
     starCtx.fillRect(Math.floor(Math.random()*stars.width),
                      Math.floor(Math.random()*stars.height),
                      2,
@@ -139,12 +207,22 @@ var Starfield = function(speed,opacity,numStars,clear) {
   };
 };
 
+// =============================================
+// PLAYER SHIP - with lives, invincibility, and damage effects
+// =============================================
 var PlayerShip = function() { 
   this.setup('ship', { vx: 0, reloadTime: 0.25, maxVel: 200 });
 
   this.reload = this.reloadTime;
   this.x = Game.width/2 - this.w / 2;
   this.y = Game.height - Game.playerOffset - this.h;
+
+  // Invincibility system
+  this.invincible = false;
+  this.invincibleTimer = 0;
+  this.invincibleDuration = 2.0; // 2 seconds of invincibility after hit
+  this.blinkTimer = 0;
+  this.visible = true;
 
   this.step = function(dt) {
     if(Game.keys['left']) { this.vx = -this.maxVel; }
@@ -165,6 +243,46 @@ var PlayerShip = function() {
 
       this.board.add(new PlayerMissile(this.x,this.y+this.h/2));
       this.board.add(new PlayerMissile(this.x+this.w,this.y+this.h/2));
+      
+      AudioSystem.playShoot();
+    }
+
+    // Handle invincibility timer
+    if(this.invincible) {
+      this.invincibleTimer -= dt;
+      this.blinkTimer += dt;
+      
+      // Blink effect - toggle visibility rapidly
+      if(this.blinkTimer > 0.08) {
+        this.visible = !this.visible;
+        this.blinkTimer = 0;
+      }
+
+      if(this.invincibleTimer <= 0) {
+        this.invincible = false;
+        this.visible = true;
+      }
+    }
+  };
+
+  this.draw = function(ctx) {
+    if(!this.visible) return;
+    
+    // If invincible, draw with reduced opacity and a shield glow
+    if(this.invincible) {
+      ctx.save();
+      ctx.globalAlpha = 0.6;
+      SpriteSheet.draw(ctx,this.sprite,this.x,this.y,this.frame);
+      
+      // Shield glow effect
+      ctx.globalAlpha = 0.15 + 0.1 * Math.sin(Date.now() / 100);
+      ctx.fillStyle = '#6ec6ff';
+      ctx.beginPath();
+      ctx.arc(this.x + this.w/2, this.y + this.h/2, this.w * 0.7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      SpriteSheet.draw(ctx,this.sprite,this.x,this.y,this.frame);
     }
   };
 };
@@ -173,8 +291,31 @@ PlayerShip.prototype = new Sprite();
 PlayerShip.prototype.type = OBJECT_PLAYER;
 
 PlayerShip.prototype.hit = function(damage) {
-  if(this.board.remove(this)) {
-    loseGame();
+  // If invincible, ignore hit
+  if(this.invincible) return;
+
+  Game.lives--;
+  AudioSystem.playLifeLost();
+
+  // Trigger screen flash
+  if(Game.screenFlash) {
+    Game.screenFlash.trigger();
+  }
+
+  // Spawn explosion at player position
+  this.board.add(new Explosion(this.x + this.w/2, this.y + this.h/2));
+
+  if(Game.lives <= 0) {
+    // All lives lost - game over
+    if(this.board.remove(this)) {
+      loseGame();
+    }
+  } else {
+    // Still has lives — become invincible
+    this.invincible = true;
+    this.invincibleTimer = this.invincibleDuration;
+    this.blinkTimer = 0;
+    this.visible = true;
   }
 };
 
@@ -204,6 +345,14 @@ var Enemy = function(blueprint,override) {
   this.merge(this.baseParameters);
   this.setup(blueprint.sprite,blueprint);
   this.merge(override);
+
+  // Scale x position relative to dynamic game width
+  // Original positions were designed for 320px width
+  // Center enemies within the full playable width
+  if(this.x !== undefined) {
+    var centerOffset = (Game.width - 320) / 2;
+    this.x = this.x + centerOffset;
+  }
 };
 
 Enemy.prototype = new Sprite();
@@ -270,7 +419,7 @@ EnemyMissile.prototype.type = OBJECT_ENEMY_PROJECTILE;
 
 EnemyMissile.prototype.step = function(dt)  {
   this.y += this.vy * dt;
-  var collision = this.board.collide(this,OBJECT_PLAYER)
+  var collision = this.board.collide(this,OBJECT_PLAYER);
   if(collision) {
     collision.hit(this.damage);
     this.board.remove(this);
@@ -285,6 +434,7 @@ var Explosion = function(centerX,centerY) {
   this.setup('explosion', { frame: 0 });
   this.x = centerX - this.w/2;
   this.y = centerY - this.h/2;
+  AudioSystem.playExplosion();
 };
 
 Explosion.prototype = new Sprite();
@@ -300,4 +450,16 @@ window.addEventListener("load", function() {
   Game.initialize("game",sprites,startGame);
 });
 
-
+// Click ripple animation
+document.addEventListener('mousedown', function(e) {
+  var ripple = document.createElement('div');
+  ripple.className = 'click-ripple';
+  ripple.style.left = e.clientX + 'px';
+  ripple.style.top = e.clientY + 'px';
+  document.body.appendChild(ripple);
+  
+  // Remove element after animation (0.25s)
+  setTimeout(function() {
+    ripple.remove();
+  }, 250);
+});

@@ -4,18 +4,114 @@
   <meta charset="UTF-8"/>
   <title>Alien Invasion</title>
   <link rel="stylesheet" href="base.css" type="text/css" />
-  <link href='http://fonts.googleapis.com/css?family=Bangers' rel='stylesheet' type='text/css'>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "surface-container-highest": "#353535",
+            "background": "#131313",
+            "on-primary": "#690100",
+            "surface-variant": "#353535",
+            "on-surface-variant": "#ebbbb4",
+            "primary": "#ffb4a8",
+            "surface": "#131313",
+            "surface-container": "#1f1f1f",
+            "on-surface": "#e2e2e2",
+          },
+          fontFamily: {
+            "body": ["Space Grotesk"]
+          }
+        }
+      }
+    }
+  </script>
   <meta name="viewport" content="width=device-width, user-scalable=0, minimum-scale=1.0, maximum-scale=1.0"/>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Alien Invasion - A retro space shooter game. Defend Earth from alien invaders!">
 </head>
 <body>
   <div id='container'>
     <canvas id='game' width='320' height='480'></canvas>
+    <!-- Audio Mute Toggle Button -->
+    <button id="btn-mute" class="absolute top-4 left-1/2 -translate-x-1/2 z-50 text-white opacity-50 hover:opacity-100 cursor-pointer p-2" aria-label="Toggle Audio">
+      <svg id="icon-speaker-on" width="24" height="24" viewBox="0 0 24 24" fill="#ffb4a8" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+        <path d="M6 9h4l5-5v16l-5-5H6V9z M17 7v10h1V7h-1z M19 5v14h1V5h-1z" />
+      </svg>
+      <svg id="icon-speaker-off" width="24" height="24" viewBox="0 0 24 24" fill="#ffb4a8" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges" class="hidden">
+        <path d="M6 9h4l5-5v16l-5-5H6V9z M16 9l2 2-2 2h2l2-2-2-2h-2z" />
+      </svg>
+    </button>
   </div>
+
+  <!-- Title Screen Overlay -->
+  <div id="title-screen-overlay" class="fixed inset-0 z-[1000] flex-col items-center justify-center font-body text-on-surface bg-background flex">
+    <main class="relative z-10 flex flex-col items-center justify-center px-4 py-8 text-center w-full max-w-2xl h-full pb-[10vh]">
+      <!-- HEADER MODULE -->
+      <div class="mb-16">
+        <h1 class="text-7xl md:text-8xl font-black uppercase tracking-[0.5rem] leading-none mb-6 text-primary drop-shadow-[4px_4px_0px_#e5e2e1]">ALIEN<br>INVASION</h1>
+        <div class="h-[2px] w-full max-w-sm bg-primary mx-auto mb-2 relative"></div>
+      </div>
+
+      <!-- INTERACTION MODULE -->
+      <div class="flex flex-col gap-6 items-center w-full max-w-[280px]">
+        <!-- START GAME -->
+        <button id="title-btn-start" class="group relative w-full py-4 bg-primary hover:bg-white text-on-primary hover:text-background transition-colors duration-75 flex flex-col items-center cursor-pointer">
+          <span class="font-bold text-2xl uppercase tracking-[0.3rem]">START GAME</span>
+          <span class="text-[10px] opacity-70 group-hover:opacity-100 uppercase mt-1 tracking-widest">INITIATE SEQUENCE</span>
+          <!-- PIXEL OFFSET SHADOW SIMULATION -->
+          <div class="absolute inset-0 translate-x-[4px] translate-y-[4px] bg-on-surface -z-10 group-active:translate-x-0 group-active:translate-y-0 transition-transform"></div>
+        </button>
+
+        <!-- SETTINGS -->
+        <button id="title-btn-settings" class="group relative w-full py-3 bg-surface-container-high hover:bg-surface-container-highest text-on-surface transition-colors duration-75 flex flex-col items-center cursor-pointer border border-on-surface-variant/20">
+          <span class="font-bold text-lg uppercase tracking-[0.3rem]">SETTINGS</span>
+        </button>
+
+        <!-- HIGH SCORES -->
+        <button id="title-btn-scores" class="group relative w-full py-3 bg-surface-container-high hover:bg-surface-container-highest text-on-surface transition-colors duration-75 flex flex-col items-center cursor-pointer border border-on-surface-variant/20">
+          <span class="font-bold text-lg uppercase tracking-[0.3rem]">HIGH SCORES</span>
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- Game Over Overlay -->
+  <div id="game-over-overlay" class="fixed inset-0 z-[1000] hidden flex-col items-center justify-center font-body text-on-surface bg-black/80">
+    <main class="relative z-10 flex flex-col items-center justify-center px-4 py-8 text-center w-full max-w-2xl h-full pb-[10vh]">
+      <!-- HEADER MODULE -->
+      <div class="mb-12">
+        <h1 class="text-6xl md:text-8xl font-black uppercase tracking-[0.5rem] text-primary mb-2">GAME OVER</h1>
+        <div class="h-1 w-full bg-primary mx-auto mb-8"></div>
+        <p class="text-on-surface-variant font-mono text-xs tracking-widest uppercase">CONNECTION TO PILOT SEVERED // PILOT_ID: X-99</p>
+      </div>
+      <!-- SCORE MODULE -->
+      <div class="bg-surface-container border-2 border-on-surface-variant/20 p-8 mb-12 w-full relative">
+        <div class="absolute -top-3 left-4 bg-surface px-2 text-[10px] text-on-surface-variant font-mono tracking-tighter uppercase">MISSION_LOG_042</div>
+        <div class="mb-2">
+          <p class="text-on-surface-variant font-mono text-xs uppercase mb-1">TOTAL_CALCULATION</p>
+          <p class="text-4xl md:text-5xl font-bold text-white font-mono tracking-widest">SCORE: <span id="game-over-score">00000000</span></p>
+        </div>
+      </div>
+      <!-- INTERACTION MODULE -->
+      <div class="flex flex-col md:flex-row gap-6 items-center">
+        <!-- PRIMARY RETRY -->
+        <button id="game-over-retry" class="group relative px-12 py-4 bg-primary hover:bg-white text-on-primary hover:text-background transition-colors duration-75 flex flex-col items-center cursor-pointer">
+          <span class="font-bold text-2xl uppercase tracking-[0.3rem]">RETRY</span>
+          <span class="text-[10px] opacity-70 group-hover:opacity-100 uppercase mt-1 tracking-widest">PRESS_START</span>
+          <!-- PIXEL OFFSET SHADOW SIMULATION -->
+          <div class="absolute inset-0 translate-x-2 translate-y-2 bg-on-primary -z-10 group-active:translate-x-0 group-active:translate-y-0 transition-transform"></div>
+        </button>
+      </div>
+    </main>
+  </div>
+  <script src='audio.js'></script>
   <script src='engine.js'></script>
   <script src='game.js'></script>
 </body>
 </html>
-
-
