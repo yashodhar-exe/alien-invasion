@@ -78,9 +78,13 @@ var playGame = function() {
 };
 
 var winGame = function() {
-  Game.setBoard(3,new TitleScreen("You win!", 
-                                  "Press fire to play again",
-                                  playGame));
+  if (Game.points >= 500) {
+    Game.setBoard(3,new TitleScreen("Mission Accomplished!", 
+                                    "Press fire to play again",
+                                    playGame));
+  } else {
+    loseGame();
+  }
 };
 
 var loseGame = function() {

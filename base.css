@@ -60,7 +60,7 @@ html, body {
   height: 100%;
   overflow: hidden;
   background-color: #000;
-  cursor: url('data:image/svg+xml;utf8,<svg width="23" height="23" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path d="M11 0h1v8h-1zm0 15h1v8h-1zM0 11h8v1H0zm15 0h8v1h-8zm-4 0h1v1h-1z" fill="%23ffb4a8" stroke="black" stroke-width="1.5"/></svg>') 11 11, crosshair;
+  cursor: url('data:image/svg+xml;utf8,<svg width="23" height="23" viewBox="0 0 23 23" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges"><path d="M11 0h1v8h-1zm0 15h1v8h-1zM0 11h8v1H0zm15 0h8v1h-8zm-4 0h1v1h-1z" fill="white" stroke="white" stroke-width="1.5"/></svg>') 11 11, crosshair;
 }
 
 /* Custom pointer for interactive elements */
